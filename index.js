@@ -29,6 +29,48 @@ async function run() {
     await client.connect();
 
     const tasksCollection = client.db("earnlyDb").collection("tasks");
+    const usersCollection = client.db("earnlyDb").collection("users");
+
+    // save or update user in db
+    // app.post('/users/:email', async (req, res) => {
+    //   const email = req.params.email
+    //   const query = { email }
+    //   const user = req.body
+     
+    //   const isExist = await usersCollection.findOne(query)
+    //   if (isExist) {
+    //     return res.send(isExist)
+    //   }
+    //   const newUser = {
+    //     ...user,
+    //     role: 'customer', 
+    //     timestamp: Date.now(), 
+    //   };
+  
+    //   const result = await usersCollection.insertOne(newUser);
+    //   res.send(result)
+    // })
+
+    app.post('/users/:email', async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+    
+      const updateDoc = {
+        $set: user,
+        $setOnInsert: {
+          role: 'customer', 
+          timestamp: new Date(), 
+        },
+      };
+    
+      const options = { upsert: true }; 
+    
+      const result = await usersCollection.updateOne({ email }, updateDoc, options);
+      res.send(result);
+    });
+
+
+
 
     app.get('/tasks', async(req, res) => {
         const result = await tasksCollection.find().toArray();
