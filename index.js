@@ -31,43 +31,34 @@ async function run() {
     const tasksCollection = client.db("earnlyDb").collection("tasks");
     const usersCollection = client.db("earnlyDb").collection("users");
 
-    // save or update user in db
-    // app.post('/users/:email', async (req, res) => {
-    //   const email = req.params.email
-    //   const query = { email }
-    //   const user = req.body
-     
-    //   const isExist = await usersCollection.findOne(query)
-    //   if (isExist) {
-    //     return res.send(isExist)
-    //   }
-    //   const newUser = {
-    //     ...user,
-    //     role: 'customer', 
-    //     timestamp: Date.now(), 
-    //   };
-  
-    //   const result = await usersCollection.insertOne(newUser);
-    //   res.send(result)
-    // })
+    
 
     app.post('/users/:email', async (req, res) => {
-      const email = req.params.email;
-      const user = req.body;
-    
+      
+      const { name, email, image, role }  = req.body;
+      
+      const initialCoins = role === 'Worker' ? 10 : 50;
+      const user = {
+        name,
+        email,
+        image,
+        role: role || "Worker",
+        coins: initialCoins,
+        timestamp: new Date(),
+      };
+
+      const filter = { email };
+      const options = { upsert: true };
       const updateDoc = {
-        $set: user,
-        $setOnInsert: {
-          role: 'customer', 
-          timestamp: new Date(), 
-        },
+        $setOnInsert: user, 
       };
     
-      const options = { upsert: true }; 
-    
-      const result = await usersCollection.updateOne({ email }, updateDoc, options);
+      const result = await usersCollection.updateOne(filter, updateDoc, options);
       res.send(result);
     });
+
+
+    
 
 
 
