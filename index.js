@@ -25,8 +25,10 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    const tasksCollection = client.db("earnlyDb").collection("tasks");
+
+    
     const usersCollection = client.db("earnlyDb").collection("users");
+    const tasksCollection = client.db("earnlyDb").collection("tasks");
 
     // app.post('/users/:email', async (req, res) => {
 
@@ -78,8 +80,24 @@ async function run() {
     });
 
     app.get("/tasks", async (req, res) => {
-      const result = await tasksCollection.find().toArray();
+      const email = req.query.email;
+
+      let result;
+
+      if (email) {
+        const query = { userEmail: email };
+        result = await tasksCollection.find(query).toArray();
+      } else {
+        result = await tasksCollection.find().toArray();
+      }
+
       res.send(result);
+    });
+    app.post("/tasks", async (req, res) => {
+      const newTask = req.body;
+      const result = await tasksCollection.insertOne(newTask);
+      res.send(result);
+      
     });
 
     // Send a ping to confirm a successful connection
