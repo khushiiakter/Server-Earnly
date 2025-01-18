@@ -56,17 +56,18 @@ async function run() {
 
     app.post("/users/:email", async (req, res) => {
       const { name, email, image, role } = req.body;
-
+      const defaultRole = role || "Worker";
+      const initialCoins = defaultRole === "Worker" ? 10 : 50;
       const filter = { email };
       const updateDoc = {
         $set: {
           name: name || "Anonymous",
           image: image || "",
-          role: role || "Worker",
+          role: defaultRole,
           timestamp: new Date(),
         },
         $setOnInsert: {
-          coins: role === "Worker" ? 10 : 50, 
+          coins: initialCoins, 
         },
       };
       const options = { upsert: true };
@@ -78,6 +79,18 @@ async function run() {
       );
       res.send(result);
     });
+
+    // Fetch User Coins for Dashboard
+    app.get("/users/coins/:email", async (req, res) => {
+      const { email } = req.params;
+      const user = await usersCollection.findOne({ email });
+      if (user) {
+        res.send({ coins: user.coins || 0 });
+      } else {
+        res.status(404).send({ message: "User not found" });
+      }
+    });
+
 
     app.get("/tasks", async (req, res) => {
       const email = req.query.email;
