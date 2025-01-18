@@ -30,45 +30,30 @@ async function run() {
     const usersCollection = client.db("earnlyDb").collection("users");
     const tasksCollection = client.db("earnlyDb").collection("tasks");
 
-    // app.post('/users/:email', async (req, res) => {
+    app.get("/users/:email", async (req, res) => {
+      const {email} = req.params;
+      const result = await usersCollection.findOne({email});
+      res.send(result);
+      
+    });
 
-    //   const { name, email, image, role }  = req.body;
 
-    //   const initialCoins = role === 'Worker' ? 10 : 50;
-    //   const user = {
-    //     name,
-    //     email,
-    //     image,
-    //     role: role || "Worker",
-    //     coins: initialCoins,
-    //     timestamp: new Date(),
-    //   };
+    app.post("/users", async (req, res) => {
+      const { name, email, image, role,coins } = req.body;
 
-    //   const filter = { email };
-    //   const options = { upsert: true };
-    //   const updateDoc = {
-    //     $setOnInsert: user,
-    //   };
-
-    //   const result = await usersCollection.updateOne(filter, updateDoc, options);
-    //   res.send(result);
-    // });
-
-    app.post("/users/:email", async (req, res) => {
-      const { name, email, image, role } = req.body;
-      const defaultRole = role || "Worker";
-      const initialCoins = defaultRole === "Worker" ? 10 : 50;
       const filter = { email };
       const updateDoc = {
         $set: {
           name: name || "Anonymous",
+          
           image: image || "",
-          role: defaultRole,
-          timestamp: new Date(),
-        },
-        $setOnInsert: {
-          coins: initialCoins, 
-        },
+          role: role || "",
+          coins: coins || 0,
+          timestamp: new Date() },
+        
+       
+        
+        
       };
       const options = { upsert: true };
 
@@ -80,17 +65,7 @@ async function run() {
       res.send(result);
     });
 
-    // Fetch User Coins for Dashboard
-    app.get("/users/coins/:email", async (req, res) => {
-      const { email } = req.params;
-      const user = await usersCollection.findOne({ email });
-      if (user) {
-        res.send({ coins: user.coins || 0 });
-      } else {
-        res.status(404).send({ message: "User not found" });
-      }
-    });
-
+    
 
     app.get("/tasks", async (req, res) => {
       const email = req.query.email;
