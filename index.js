@@ -1,7 +1,7 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 
@@ -37,21 +37,7 @@ async function run() {
       
     });
 
-    app.get("/tasks", async (req, res) => {
-      const email = req.query.email;
-
-      let result;
-
-      if (email) {
-        const query = { userEmail: email };
-        result = await tasksCollection.find(query).sort({ completionDate: -1 }).toArray();
-      } else {
-        result = await tasksCollection.find().toArray();
-      }
-
-      res.send(result);
-    });
-
+    
 
     app.post("/users", async (req, res) => {
       const { name, email, image, role,coins } = req.body;
@@ -64,7 +50,7 @@ async function run() {
           image: image || "",
           role: role || "",
           coins: coins || 0,
-          timestamp: new Date() },
+          timestamp: new Date().toISOString().split("T")[0] },
      
       };
       const options = { upsert: true };
@@ -74,6 +60,21 @@ async function run() {
         updateDoc,
         options
       );
+      res.send(result);
+    });
+
+    app.get("/tasks", async (req, res) => {
+      const email = req.query.email;
+
+      let result;
+
+      if (email) {
+        const query = { userEmail: email };
+        result = await tasksCollection.find(query).sort({ completionDate: -1 }).toArray();
+      } else {
+        result = await tasksCollection.find().toArray();
+      }
+
       res.send(result);
     });
 
@@ -100,6 +101,28 @@ async function run() {
       res.send(result);
       
     });
+
+    app.put("/tasks/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedTask = req.body;
+
+      const result = await tasksCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedTask }
+      );
+
+      if (result.modifiedCount === 0) {
+        return res.status(404).send({
+          success: false,
+          message: "Task not found or no changes made.",
+        });
+      }
+      res.send({ success: true, message: "Task updated successfully." });
+    });
+
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
