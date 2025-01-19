@@ -37,6 +37,21 @@ async function run() {
       
     });
 
+    app.get("/tasks", async (req, res) => {
+      const email = req.query.email;
+
+      let result;
+
+      if (email) {
+        const query = { userEmail: email };
+        result = await tasksCollection.find(query).sort({ completionDate: -1 }).toArray();
+      } else {
+        result = await tasksCollection.find().toArray();
+      }
+
+      res.send(result);
+    });
+
 
     app.post("/users", async (req, res) => {
       const { name, email, image, role,coins } = req.body;
@@ -50,10 +65,7 @@ async function run() {
           role: role || "",
           coins: coins || 0,
           timestamp: new Date() },
-        
-       
-        
-        
+     
       };
       const options = { upsert: true };
 
@@ -67,22 +79,23 @@ async function run() {
 
     
 
-    app.get("/tasks", async (req, res) => {
-      const email = req.query.email;
-
-      let result;
-
-      if (email) {
-        const query = { userEmail: email };
-        result = await tasksCollection.find(query).toArray();
-      } else {
-        result = await tasksCollection.find().toArray();
-      }
-
-      res.send(result);
-    });
+    
     app.post("/tasks", async (req, res) => {
       const newTask = req.body;
+      const {userEmail, totalPayableAmount} =newTask;
+      const user = await usersCollection.findOne({email: userEmail});
+
+      if (!user || user.coins < totalPayableAmount) {
+        return res.status(400).send({ message: "Insufficient coins" });
+      }
+  
+      
+      // const updatedCoins = user.coins - totalPayableAmount;
+      await usersCollection.updateOne(
+        { email: userEmail },
+        { $inc: { coins: -totalPayableAmount } }
+      );
+  
       const result = await tasksCollection.insertOne(newTask);
       res.send(result);
       
