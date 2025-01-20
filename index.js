@@ -27,6 +27,9 @@ async function run() {
 
     const usersCollection = client.db("earnlyDb").collection("users");
     const tasksCollection = client.db("earnlyDb").collection("tasks");
+    const submissionsCollection = client
+      .db("earnlyDb")
+      .collection("submissions");
 
     app.get("/users/:email", async (req, res) => {
       const { email } = req.params;
@@ -83,6 +86,60 @@ async function run() {
         ])
         .toArray();
 
+      res.send(result);
+    });
+
+    app.get("/tasks/:id", async (req, res) => {
+      const id = req.params.id;
+    
+      try {
+        const result = await tasksCollection
+          .aggregate([
+            { $match: { _id: new ObjectId(id) } },
+            {
+              $lookup: {
+                from: "users",
+                localField: "userEmail",
+                foreignField: "email",
+                as: "userDetails",
+              },
+            },
+            {
+              $addFields: {
+                Buyer_name: { $arrayElemAt: ["$userDetails.name", 0] },
+              },
+            },
+            { $project: { userDetails: 0 } }, 
+          ])
+          .toArray();
+    
+        if (result.length === 0) {
+          return res.status(404).send({ message: "Task not found." });
+        }
+    
+        res.send(result[0]);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching task details.", error });
+      }
+    });
+
+    app.get("/submissions", async (req, res) => {
+      const { submissionId, email } = req.query;
+      let query = {};
+      if (submissionId) {
+        query.submissionId = submissionId;
+      }
+      if (email) {
+        query.userEmail = email;
+      }
+      const cursor = submissionsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.post("/submissions", async (req, res) => {
+      const { _id, ...submission } = req.body;
+      const result = await submissionsCollection.insertOne(submission);
       res.send(result);
     });
 
