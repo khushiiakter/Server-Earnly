@@ -142,6 +142,36 @@ async function run() {
       res.send({ success: true, message: "Task updated successfully." });
     });
 
+    app.delete("/tasks/:id", async (req, res) => {
+      const { id } = req.params;
+      const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
+      if (!task) {
+        return res
+          .status(404)
+          .send({ success: false, message: "Task not found." });
+      }
+      // Delete the task
+      const deleteResult = await tasksCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      if (deleteResult.deletedCount === 0) {
+        return res
+          .status(400)
+          .send({ success: false, message: "Failed to delete the task." });
+      }
+
+      // If the task is not completed, calculate the refill amount
+      if (!task.isCompleted) {
+        const refillAmount = task.requiredWorkers * task.payableAmount;
+        await usersCollection.updateOne(
+          { email: task.userEmail },
+          { $inc: { coins: refillAmount } }
+        );
+      }
+      res.send({ success: true, message: "Task deleted successfully." });
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
