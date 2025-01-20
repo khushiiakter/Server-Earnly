@@ -59,19 +59,29 @@ async function run() {
     });
 
     app.get("/tasks", async (req, res) => {
-      const email = req.query.email;
+      const email = req.query.email; // Optional query parameter to filter by user's email
 
-      let result;
+      const matchStage = email ? { userEmail: email } : {};
 
-      if (email) {
-        const query = { userEmail: email };
-        result = await tasksCollection
-          .find(query)
-          .sort({ completionDate: -1 })
-          .toArray();
-      } else {
-        result = await tasksCollection.find().toArray();
-      }
+      const result = await tasksCollection
+        .aggregate([
+          { $match: matchStage },
+          {
+            $lookup: {
+              from: "users",
+              localField: "userEmail",
+              foreignField: "email",
+              as: "userDetails",
+            },
+          },
+          {
+            $addFields: {
+              Buyer_name: { $arrayElemAt: ["$userDetails.name", 0] },
+            },
+          },
+          { $project: { userDetails: 0 } },
+        ])
+        .toArray();
 
       res.send(result);
     });
