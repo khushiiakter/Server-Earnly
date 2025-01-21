@@ -65,6 +65,16 @@ async function run() {
       );
       res.send(result);
     });
+    app.put('/users/:id', async (req, res) => {
+      const id = req.params.id;
+      const { role } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = { $set: { role } };
+      
+      const result = await usersCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+    
 
     app.delete('/users/:id', async (req, res) => {
       const id = req.params.id;
