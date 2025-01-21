@@ -86,7 +86,7 @@ async function run() {
       const user = await usersCollection.findOne(query);
       let admin = false;
       if (user) {
-        admin = user?.role === 'admin';
+        admin = user?.role === 'Admin';
       }
       res.send({ admin });
     });
@@ -121,7 +121,7 @@ async function run() {
       );
       res.send(result);
     });
-    app.put("/users/admin/:id",verifyToken,verifyAdmin, async (req, res) => {
+    app.put("/users/:id",verifyToken,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const { role } = req.body;
       const query = { _id: new ObjectId(id) };
