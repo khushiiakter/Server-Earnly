@@ -31,6 +31,11 @@ async function run() {
       .db("earnlyDb")
       .collection("submissions");
 
+
+      app.get('/users',  async (req, res) => {
+        const result = await usersCollection.find().toArray();
+        res.send(result);
+      });
     app.get("/users/:email", async (req, res) => {
       const { email } = req.params;
       const result = await usersCollection.findOne({ email });
@@ -60,6 +65,13 @@ async function run() {
       );
       res.send(result);
     });
+
+    app.delete('/users/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    })
 
     app.get("/tasks", async (req, res) => {
       const email = req.query.email; // Optional query parameter to filter by user's email
