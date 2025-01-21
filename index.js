@@ -63,12 +63,23 @@ async function run() {
       const email = req.decoded.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const isAdmin = user?.role === 'admin';
+      const isAdmin = user?.role === 'Admin';
       if (!isAdmin) {
         return res.status(403).send({ message: 'forbidden access' });
       }
       next();
-    }
+    };
+
+    const verifyBuyer = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const isBuyer = user?.role === 'Buyer';
+      if (!isBuyer) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      next();
+    };
 
 
     app.get("/users",verifyToken,verifyAdmin, async (req, res) => {
@@ -91,6 +102,21 @@ async function run() {
       res.send({ admin });
     });
 
+    app.get('/users/buyer/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' })
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      let buyer = false;
+      if (user) {
+        buyer = user?.role === 'Buyer';
+      }
+      res.send({ buyer });
+    });
 
     app.get("/users/:email", async (req, res) => {
       const { email } = req.params;
@@ -222,7 +248,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/tasks",verifyToken, async (req, res) => {
+    app.post("/tasks", async (req, res) => {
       const newTask = req.body;
       const { userEmail, totalPayableAmount } = newTask;
       const user = await usersCollection.findOne({ email: userEmail });
@@ -241,7 +267,7 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/tasks/:id", async (req, res) => {
+    app.put("/tasks/:id",verifyToken,verifyBuyer, async (req, res) => {
       const { id } = req.params;
       const updatedTask = req.body;
 
@@ -288,7 +314,7 @@ async function run() {
       res.send({ success: true, message: "Task updated successfully." });
     });
 
-    app.delete("/tasks/:id", async (req, res) => {
+    app.delete("/tasks/:id",verifyToken,verifyBuyer, async (req, res) => {
       const { id } = req.params;
       const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
       if (!task) {
