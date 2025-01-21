@@ -124,16 +124,10 @@ async function run() {
     });
 
     app.get("/submissions", async (req, res) => {
-      const { submissionId, email } = req.query;
-      let query = {};
-      if (submissionId) {
-        query.submissionId = submissionId;
-      }
-      if (email) {
-        query.userEmail = email;
-      }
-      const cursor = submissionsCollection.find(query);
-      const result = await cursor.toArray();
+      const worker_email = req.query.worker_email;
+      const query = {worker_email}
+      
+      const result = await submissionsCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -142,6 +136,14 @@ async function run() {
       const result = await submissionsCollection.insertOne(submission);
       res.send(result);
     });
+    app.delete('/submissions/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await submissionsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    
 
     app.post("/tasks", async (req, res) => {
       const newTask = req.body;
@@ -239,6 +241,8 @@ async function run() {
       res.send({ success: true, message: "Task deleted successfully." });
     });
 
+    
+    
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
