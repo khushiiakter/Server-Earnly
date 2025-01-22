@@ -25,7 +25,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const usersCollection = client.db("earnlyDb").collection("users");
     const tasksCollection = client.db("earnlyDb").collection("tasks");
@@ -185,12 +185,11 @@ async function run() {
     });
 
     app.get("/tasks", async (req, res) => {
-      const email = req.query.email; // Optional query parameter to filter by user's email
+      const email = req.query.email; 
 
       const matchStage = email ? { userEmail: email } : {};
 
-      const result = await tasksCollection
-        .aggregate([
+      const result = await tasksCollection.aggregate([
           { $match: matchStage },
           {
             $lookup: {
@@ -206,8 +205,7 @@ async function run() {
             },
           },
           { $project: { userDetails: 0 } },
-        ])
-        .toArray();
+        ]).toArray();
 
       res.send(result);
     });
@@ -334,7 +332,7 @@ async function run() {
       res.send({ success: true, message: "Task updated successfully." });
     });
 
-    app.delete("/tasks/:id", verifyToken, verifyBuyer, async (req, res) => {
+    app.delete("/tasks/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
       if (!task) {
@@ -342,7 +340,7 @@ async function run() {
           .status(404)
           .send({ success: false, message: "Task not found." });
       }
-      // Delete the task
+      
       const deleteResult = await tasksCollection.deleteOne({
         _id: new ObjectId(id),
       });
@@ -363,6 +361,14 @@ async function run() {
       }
       res.send({ success: true, message: "Task deleted successfully." });
     });
+
+    // app.delete('/tasks/:id', verifyToken, async (req, res) => {
+    //   const id = req.params.id;
+    //   const query = { _id: new ObjectId(id) }
+    //   const result = await tasksCollection.deleteOne(query);
+    //   res.send(result);
+    // })
+
 
     app.post("/api/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
@@ -399,10 +405,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
