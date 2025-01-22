@@ -4,7 +4,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -29,7 +29,9 @@ async function run() {
 
     const usersCollection = client.db("earnlyDb").collection("users");
     const tasksCollection = client.db("earnlyDb").collection("tasks");
-    const submissionsCollection = client.db("earnlyDb").collection("submissions");
+    const submissionsCollection = client
+      .db("earnlyDb")
+      .collection("submissions");
     const paymentCollection = client.db("earnlyDb").collection("payments");
 
     // jwt related api
@@ -57,15 +59,14 @@ async function run() {
       });
     };
 
-
     // use verify admin after verifyToken
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const isAdmin = user?.role === 'Admin';
+      const isAdmin = user?.role === "Admin";
       if (!isAdmin) {
-        return res.status(403).send({ message: 'forbidden access' });
+        return res.status(403).send({ message: "forbidden access" });
       }
       next();
     };
@@ -74,46 +75,45 @@ async function run() {
       const email = req.decoded.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const isBuyer = user?.role === 'Buyer';
+      const isBuyer = user?.role === "Buyer";
       if (!isBuyer) {
-        return res.status(403).send({ message: 'forbidden access' });
+        return res.status(403).send({ message: "forbidden access" });
       }
       next();
     };
 
-
-    app.get("/users",verifyToken,verifyAdmin, async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-    app.get('/users/admin/:email', verifyToken, async (req, res) => {
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
 
       if (email !== req.decoded.email) {
-        return res.status(403).send({ message: 'forbidden access' })
+        return res.status(403).send({ message: "forbidden access" });
       }
 
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       let admin = false;
       if (user) {
-        admin = user?.role === 'Admin';
+        admin = user?.role === "Admin";
       }
       res.send({ admin });
     });
 
-    app.get('/users/buyer/:email', verifyToken, async (req, res) => {
+    app.get("/users/buyer/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
 
       if (email !== req.decoded.email) {
-        return res.status(403).send({ message: 'forbidden access' })
+        return res.status(403).send({ message: "forbidden access" });
       }
 
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       let buyer = false;
       if (user) {
-        buyer = user?.role === 'Buyer';
+        buyer = user?.role === "Buyer";
       }
       res.send({ buyer });
     });
@@ -147,7 +147,7 @@ async function run() {
       );
       res.send(result);
     });
-    app.put("/users/:id",verifyToken,verifyAdmin, async (req, res) => {
+    app.put("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const { role } = req.body;
       const query = { _id: new ObjectId(id) };
@@ -156,8 +156,28 @@ async function run() {
       const result = await usersCollection.updateOne(query, updateDoc);
       res.send(result);
     });
+    // Update user coins
+    app.patch("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const { coins } = req.body;
 
-    app.delete("/users/:id",verifyToken,verifyAdmin, async (req, res) => {
+      try {
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { coins } } // Update the user's coins
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send({ message: "User coins updated successfully" });
+      } catch (error) {
+        res.status(500).send({ message: "Error updating user coins", error });
+      }
+    });
+
+    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
@@ -267,7 +287,7 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/tasks/:id",verifyToken,verifyBuyer, async (req, res) => {
+    app.put("/tasks/:id", verifyToken, verifyBuyer, async (req, res) => {
       const { id } = req.params;
       const updatedTask = req.body;
 
@@ -314,7 +334,7 @@ async function run() {
       res.send({ success: true, message: "Task updated successfully." });
     });
 
-    app.delete("/tasks/:id",verifyToken,verifyBuyer, async (req, res) => {
+    app.delete("/tasks/:id", verifyToken, verifyBuyer, async (req, res) => {
       const { id } = req.params;
       const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
       if (!task) {
@@ -346,48 +366,37 @@ async function run() {
 
     app.post("/api/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
-  
+
       try {
-          const paymentIntent = await stripe.paymentIntents.create({
-              amount, // Amount in cents
-              currency: "usd",
-          });
-          res.send({ clientSecret: paymentIntent.client_secret });
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount, // Amount in cents
+          currency: "usd",
+        });
+        res.send({ clientSecret: paymentIntent.client_secret });
       } catch (error) {
-          res.status(500).send({ error: error.message });
+        res.status(500).send({ error: error.message });
       }
-  });
+    });
 
-    app.get('/payments/:email', verifyToken, async (req, res) => {
-      const query = { email: req.params.email }
-      if (req.params.email !== req.decoded.email) {
-        return res.status(403).send({ message: 'forbidden access' });
-      }
-      const result = await paymentCollection.find(query).toArray();
-      res.send(result);
-    })
-
-    app.post('/payments', async (req, res) => {
+    app.post("/payments", async (req, res) => {
       const payment = req.body;
-      const paymentResult = await paymentCollection.insertOne(payment);
+      try {
+        const result = await paymentCollection.insertOne(payment);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
 
-      //  carefully delete each item from the cart
-      console.log('payment info', payment);
-      const query = {
-        _id: {
-          $in: payment.cartIds.map(id => new ObjectId(id))
-        }
-      };
-
-      const deleteResult = await tasksCollection.deleteMany(query);
-
-      res.send({ paymentResult, deleteResult });
-    })
-
-
-
-
-
+    app.get("/payments/:email", async (req, res) => {
+      const { email } = req.params;
+      try {
+        const payments = await paymentCollection.find({ email }).toArray();
+        res.send(payments);
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
