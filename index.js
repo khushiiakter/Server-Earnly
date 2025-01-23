@@ -185,11 +185,12 @@ async function run() {
     });
 
     app.get("/tasks", async (req, res) => {
-      const email = req.query.email; 
+      const email = req.query.email;
 
       const matchStage = email ? { userEmail: email } : {};
 
-      const result = await tasksCollection.aggregate([
+      const result = await tasksCollection
+        .aggregate([
           { $match: matchStage },
           {
             $lookup: {
@@ -205,7 +206,8 @@ async function run() {
             },
           },
           { $project: { userDetails: 0 } },
-        ]).toArray();
+        ])
+        .toArray();
 
       res.send(result);
     });
@@ -248,23 +250,162 @@ async function run() {
 
     app.get("/submissions", async (req, res) => {
       const worker_email = req.query.worker_email;
+      
+      
       const query = { worker_email };
+  
+      try {
+          const result = await submissionsCollection.find(query).toArray();
+          console.log("Submissions fetched from database:", result); 
+          res.send(result);
+      } catch (error) {
+          console.error("Error fetching submissions:", error); 
+          res.status(500).send({ message: "Failed to fetch submissions", error });
+      }
+  });
+  app.get("/buyer/statistics", verifyToken, async (req, res) => {
+    const buyerEmail = req.decoded.email;
+  
+    try {
+      const tasks = await tasksCollection.find({ userEmail: buyerEmail }).toArray();
+      const totalTasks = tasks.length;
+      const pendingWorkers = tasks.reduce((sum, task) => sum + task.requiredWorkers, 0);
+      const totalPayment = tasks.reduce((sum, task) => sum + task.requiredWorkers * task.payableAmount, 0);
+  
+      res.send({ totalTasks, pendingWorkers, totalPayment });
+    } catch (error) {
+      console.error("Error fetching buyer statistics:", error);
+      res.status(500).send({ message: "Failed to fetch statistics", error });
+    }
+  });
+  
+  // Get Submissions for Buyer Tasks
+  app.get("/buyer/submissions", verifyToken, async (req, res) => {
+    const email = req.decoded.email; // Ensure this is the logged-in buyer's email
+  
+    try {
+      const submissions = await submissionsCollection
+        .find({ buyer_email: email, status: "pending" })
+        .toArray();
+      res.send(submissions);
+    } catch (error) {
+      res.status(500).send({ message: "Failed to fetch submissions", error });
+    }
+  });
+  
+  // Approve Submission
+  app.post("/submissions/approve", verifyToken, async (req, res) => {
+    const { submissionId, worker_email, payable_amount } = req.body;
+  
+    try {
+      await submissionsCollection.updateOne(
+        { _id:  ObjectId(submissionId) },
+        { $set: { status: "approved" } }
+      );
+  
+      await usersCollection.updateOne(
+        { email: worker_email },
+        { $inc: { coins: payable_amount } }
+      );
+  
+      res.send({ message: "Submission approved successfully." });
+    } catch (error) {
+      console.error("Error approving submission:", error);
+      res.status(500).send({ message: "Failed to approve submission", error });
+    }
+  });
+  
+  // Reject Submission
+  app.post("/submissions/reject", verifyToken, async (req, res) => {
+    const { submissionId, task_id } = req.body;
+  
+    try {
+      await submissionsCollection.updateOne(
+        { _id:ObjectId(submissionId) },
+        { $set: { status: "rejected" } }
+      );
+  
+      await tasksCollection.updateOne(
+        { _id:  ObjectId(task_id) },
+        { $inc: { requiredWorkers: 1 } }
+      );
+  
+      res.send({ message: "Submission rejected successfully." });
+    } catch (error) {
+      console.error("Error rejecting submission:", error);
+      res.status(500).send({ message: "Failed to reject submission", error });
+    }
+  });
+  
 
-      const result = await submissionsCollection.find(query).toArray();
-      res.send(result);
-    });
-
-    app.post("/submissions", async (req, res) => {
-      const { _id, ...submission } = req.body;
+  app.post("/submissions", async (req, res) => {
+    const { _id, ...submission } = req.body;
+  
+    // Validate input
+    if (!submission.worker_email || !submission.task_id || !submission.status) {
+      return res.status(400).send({ message: "Invalid submission data" });
+    }
+  
+    try {
+      // Ensure task_id is in ObjectId format
+      submission.task_id = new ObjectId (submission.task_id);
+  
       const result = await submissionsCollection.insertOne(submission);
       res.send(result);
-    });
+    } catch (error) {
+      res.status(500).send({ message: "Failed to insert submission", error });
+    }
+  });
+  
     app.delete("/submissions/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await submissionsCollection.deleteOne(query);
       res.send(result);
     });
+
+    app.get("/worker/statistics", verifyToken, async (req, res) => {
+      const { worker_email } = req.query;
+    
+      try {
+        const totalSubmissions = await submissionsCollection.countDocuments({
+          worker_email,
+        });
+    
+        const pendingSubmissions = await submissionsCollection.countDocuments({
+          worker_email,
+          status: "pending",
+        });
+    
+        const totalEarnings = await submissionsCollection.aggregate([
+          { $match: { worker_email, status: "approved" } },
+          { $group: { _id: null, total: { $sum: "$payable_amount" } } },
+        ]).toArray();
+    
+        res.send({
+          totalSubmissions,
+          pendingSubmissions,
+          totalEarnings: totalEarnings[0]?.total || 0,
+        });
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch worker statistics", error });
+      }
+    });
+
+    app.get("/worker/approved-submissions", verifyToken, async (req, res) => {
+      const { worker_email } = req.query;
+    
+      try {
+        const approvedSubmissions = await submissionsCollection
+          .find({ worker_email, status: "approved" })
+          .toArray();
+        res.send(approvedSubmissions);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch approved submissions", error });
+      }
+    });
+
+   
 
     app.post("/tasks", async (req, res) => {
       const newTask = req.body;
@@ -340,7 +481,7 @@ async function run() {
           .status(404)
           .send({ success: false, message: "Task not found." });
       }
-      
+
       const deleteResult = await tasksCollection.deleteOne({
         _id: new ObjectId(id),
       });
@@ -362,13 +503,7 @@ async function run() {
       res.send({ success: true, message: "Task deleted successfully." });
     });
 
-    // app.delete('/tasks/:id', verifyToken, async (req, res) => {
-    //   const id = req.params.id;
-    //   const query = { _id: new ObjectId(id) }
-    //   const result = await tasksCollection.deleteOne(query);
-    //   res.send(result);
-    // })
-
+    
 
     app.post("/api/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
