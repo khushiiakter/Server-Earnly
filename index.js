@@ -33,6 +33,9 @@ async function run() {
       .db("earnlyDb")
       .collection("submissions");
     const paymentCollection = client.db("earnlyDb").collection("payments");
+    const withdrawalsCollection = client
+      .db("earnlyDb")
+      .collection("withdrawals");
 
     // jwt related api
     app.post("/jwt", async (req, res) => {
@@ -45,7 +48,7 @@ async function run() {
 
     // middlewares
     const verifyToken = (req, res, next) => {
-      // console.log('inside verify token', req.headers.authorization);
+      
       if (!req.headers.authorization) {
         return res.status(401).send({ message: "unauthorized access" });
       }
@@ -176,6 +179,19 @@ async function run() {
         res.status(500).send({ message: "Error updating user coins", error });
       }
     });
+    
+    app.get("/topWorkers",  async (req, res) => {
+      try {
+        const topWorkers = await usersCollection
+          .find({ role: "Worker" })
+          .sort({ coins: -1 })
+          .limit(6)
+          .toArray();
+        res.send(topWorkers);
+      } catch (error) {
+        res.status(500).send(error);
+      }
+    });
 
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
@@ -250,113 +266,153 @@ async function run() {
 
     app.get("/submissions", async (req, res) => {
       const worker_email = req.query.worker_email;
-      
-      
-      const query = { worker_email };
-  
-      try {
-          const result = await submissionsCollection.find(query).toArray();
-          console.log("Submissions fetched from database:", result); 
-          res.send(result);
-      } catch (error) {
-          console.error("Error fetching submissions:", error); 
-          res.status(500).send({ message: "Failed to fetch submissions", error });
-      }
-  });
-  app.get("/buyer/statistics", verifyToken, async (req, res) => {
-    const buyerEmail = req.decoded.email;
-  
-    try {
-      const tasks = await tasksCollection.find({ userEmail: buyerEmail }).toArray();
-      const totalTasks = tasks.length;
-      const pendingWorkers = tasks.reduce((sum, task) => sum + task.requiredWorkers, 0);
-      const totalPayment = tasks.reduce((sum, task) => sum + task.requiredWorkers * task.payableAmount, 0);
-  
-      res.send({ totalTasks, pendingWorkers, totalPayment });
-    } catch (error) {
-      console.error("Error fetching buyer statistics:", error);
-      res.status(500).send({ message: "Failed to fetch statistics", error });
-    }
-  });
-  
-  // Get Submissions for Buyer Tasks
-  app.get("/buyer/submissions", verifyToken, async (req, res) => {
-    const email = req.decoded.email; // Ensure this is the logged-in buyer's email
-  
-    try {
-      const submissions = await submissionsCollection
-        .find({ buyer_email: email, status: "pending" })
-        .toArray();
-      res.send(submissions);
-    } catch (error) {
-      res.status(500).send({ message: "Failed to fetch submissions", error });
-    }
-  });
-  
-  // Approve Submission
-  app.post("/submissions/approve", verifyToken, async (req, res) => {
-    const { submissionId, worker_email, payable_amount } = req.body;
-  
-    try {
-      await submissionsCollection.updateOne(
-        { _id:  ObjectId(submissionId) },
-        { $set: { status: "approved" } }
-      );
-  
-      await usersCollection.updateOne(
-        { email: worker_email },
-        { $inc: { coins: payable_amount } }
-      );
-  
-      res.send({ message: "Submission approved successfully." });
-    } catch (error) {
-      console.error("Error approving submission:", error);
-      res.status(500).send({ message: "Failed to approve submission", error });
-    }
-  });
-  
-  // Reject Submission
-  app.post("/submissions/reject", verifyToken, async (req, res) => {
-    const { submissionId, task_id } = req.body;
-  
-    try {
-      await submissionsCollection.updateOne(
-        { _id:ObjectId(submissionId) },
-        { $set: { status: "rejected" } }
-      );
-  
-      await tasksCollection.updateOne(
-        { _id:  ObjectId(task_id) },
-        { $inc: { requiredWorkers: 1 } }
-      );
-  
-      res.send({ message: "Submission rejected successfully." });
-    } catch (error) {
-      console.error("Error rejecting submission:", error);
-      res.status(500).send({ message: "Failed to reject submission", error });
-    }
-  });
-  
 
-  app.post("/submissions", async (req, res) => {
-    const { _id, ...submission } = req.body;
-  
-    // Validate input
-    if (!submission.worker_email || !submission.task_id || !submission.status) {
-      return res.status(400).send({ message: "Invalid submission data" });
-    }
-  
-    try {
-      // Ensure task_id is in ObjectId format
-      submission.task_id = new ObjectId (submission.task_id);
-  
-      const result = await submissionsCollection.insertOne(submission);
-      res.send(result);
-    } catch (error) {
-      res.status(500).send({ message: "Failed to insert submission", error });
-    }
-  });
-  
+      const query = { worker_email };
+
+      try {
+        const result = await submissionsCollection.find(query).toArray();
+        
+        res.send(result);
+      } catch (error) {
+        
+        res.status(500).send({ message: "Failed to fetch submissions", error });
+      }
+    });
+    app.get("/buyer/statistics", verifyToken, async (req, res) => {
+      const buyerEmail = req.decoded.email;
+
+      try {
+        const tasks = await tasksCollection
+          .find({ userEmail: buyerEmail })
+          .toArray();
+        const totalTasks = tasks.length;
+        const pendingWorkers = tasks.reduce(
+          (sum, task) => sum + task.requiredWorkers,
+          0
+        );
+        const totalPayment = tasks.reduce(
+          (sum, task) => sum + task.requiredWorkers * task.payableAmount,
+          0
+        );
+
+        res.send({ totalTasks, pendingWorkers, totalPayment });
+      } catch (error) {
+        console.error("Error fetching buyer statistics:", error);
+        res.status(500).send({ message: "Failed to fetch statistics", error });
+      }
+    });
+
+    // Get Submissions for Buyer Tasks
+    app.get("/submissions/:email", verifyToken, async (req, res) => {
+      const { buyer_email } = req.decoded.email; // Ensure this is the logged-in buyer's email
+
+      try {
+        const submissions = await submissionsCollection
+          .find({ buyer_email: buyer_email, status: "pending" })
+          .toArray();
+        res.send(submissions);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch submissions", error });
+      }
+    });
+
+    // Approve Submission
+    app.post(
+      "/submissions/approve",
+      verifyToken,
+      verifyBuyer,
+      async (req, res) => {
+        const { _id, worker_email, payable_amount } = req.body;
+
+        if (!_id || !worker_email || !payable_amount) {
+          return res.status(400).send({ message: "Invalid data provided" });
+        }
+
+        try {
+          const result = await submissionsCollection.updateOne(
+            { _id: new ObjectId(_id) },
+            { $set: { status: "approved" } }
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).send({ message: "Submission not found" });
+          }
+
+          await usersCollection.updateOne(
+            { email: worker_email },
+            { $inc: { coins: payable_amount } }
+          );
+
+          res.send({ message: "Submission approved successfully." });
+        } catch (error) {
+          console.error("Error approving submission:", error);
+          res
+            .status(500)
+            .send({ message: "Failed to approve submission", error });
+        }
+      }
+    );
+
+    // Reject Submission
+    app.post(
+      "/submissions/reject",
+      verifyToken,
+      verifyBuyer,
+      async (req, res) => {
+        const { _id, task_id } = req.body;
+
+        if (!_id || !task_id) {
+          return res.status(400).send({ message: "Invalid data provided" });
+        }
+
+        try {
+          const result = await submissionsCollection.updateOne(
+            { _id: ObjectId(_id) },
+            { $set: { status: "rejected" } }
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).send({ message: "Submission not found" });
+          }
+
+          await tasksCollection.updateOne(
+            { _id: ObjectId(task_id) },
+            { $inc: { requiredWorkers: 1 } }
+          );
+
+          res.send({ message: "Submission rejected successfully." });
+        } catch (error) {
+          console.error("Error rejecting submission:", error);
+          res
+            .status(500)
+            .send({ message: "Failed to reject submission", error });
+        }
+      }
+    );
+
+    app.post("/submissions", async (req, res) => {
+      const { _id, ...submission } = req.body;
+
+      // Validate input
+      if (
+        !submission.worker_email ||
+        !submission.task_id ||
+        !submission.status
+      ) {
+        return res.status(400).send({ message: "Invalid submission data" });
+      }
+
+      try {
+        // Ensure task_id is in ObjectId format
+        submission.task_id = new ObjectId(submission.task_id);
+
+        const result = await submissionsCollection.insertOne(submission);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to insert submission", error });
+      }
+    });
+
     app.delete("/submissions/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -366,46 +422,50 @@ async function run() {
 
     app.get("/worker/statistics", verifyToken, async (req, res) => {
       const { worker_email } = req.query;
-    
+
       try {
         const totalSubmissions = await submissionsCollection.countDocuments({
           worker_email,
         });
-    
+
         const pendingSubmissions = await submissionsCollection.countDocuments({
           worker_email,
           status: "pending",
         });
-    
-        const totalEarnings = await submissionsCollection.aggregate([
-          { $match: { worker_email, status: "approved" } },
-          { $group: { _id: null, total: { $sum: "$payable_amount" } } },
-        ]).toArray();
-    
+
+        const totalEarnings = await submissionsCollection
+          .aggregate([
+            { $match: { worker_email, status: "approved" } },
+            { $group: { _id: null, total: { $sum: "$payable_amount" } } },
+          ])
+          .toArray();
+
         res.send({
           totalSubmissions,
           pendingSubmissions,
           totalEarnings: totalEarnings[0]?.total || 0,
         });
       } catch (error) {
-        res.status(500).send({ message: "Failed to fetch worker statistics", error });
+        res
+          .status(500)
+          .send({ message: "Failed to fetch worker statistics", error });
       }
     });
 
     app.get("/worker/approved-submissions", verifyToken, async (req, res) => {
       const { worker_email } = req.query;
-    
+
       try {
         const approvedSubmissions = await submissionsCollection
           .find({ worker_email, status: "approved" })
           .toArray();
         res.send(approvedSubmissions);
       } catch (error) {
-        res.status(500).send({ message: "Failed to fetch approved submissions", error });
+        res
+          .status(500)
+          .send({ message: "Failed to fetch approved submissions", error });
       }
     });
-
-   
 
     app.post("/tasks", async (req, res) => {
       const newTask = req.body;
@@ -503,8 +563,6 @@ async function run() {
       res.send({ success: true, message: "Task deleted successfully." });
     });
 
-    
-
     app.post("/api/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
 
@@ -536,6 +594,227 @@ async function run() {
         res.send(payments);
       } catch (error) {
         res.status(500).send({ error: error.message });
+      }
+    });
+
+    app.get("/admin/stats", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const totalWorkers = await usersCollection.countDocuments({
+          role: "Worker",
+        });
+        const totalBuyers = await usersCollection.countDocuments({
+          role: "Buyer",
+        });
+        const totalCoins = await usersCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$coins" } } }])
+          .toArray();
+        const totalPayments = await paymentCollection.countDocuments();
+
+        res.send({
+          totalWorkers,
+          totalBuyers,
+          totalCoins: totalCoins[0]?.total || 0,
+          totalPayments,
+        });
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch stats", error });
+      }
+    });
+
+    // Fetch all withdrawal requests (admin)
+    // Get pending withdrawal requests
+    app.get("/withdrawals", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const withdrawals = await withdrawalsCollection
+          .find({ status: "pending" })
+          .toArray();
+        res.send(withdrawals);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch withdrawals", error });
+      }
+    });
+    // Approve a withdrawal request
+app.patch("/withdrawals/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const withdrawal = await withdrawalsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!withdrawal) {
+      return res.status(404).send({ message: "Withdrawal request not found" });
+    }
+
+    const user = await usersCollection.findOne({ email: withdrawal.email });
+    if (!user || user.coins < withdrawal.amount) {
+      return res.status(400).send({ message: "Insufficient coins" });
+    }
+
+    // Update withdrawal status
+    await withdrawalsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: "approved" } }
+    );
+
+    // Decrease user coins
+    await usersCollection.updateOne(
+      { email: withdrawal.email },
+      { $inc: { coins: -withdrawal.amount } }
+    );
+
+    res.send({ message: "Withdrawal approved successfully" });
+  } catch (error) {
+    res.status(500).send({ message: "Failed to approve withdrawal", error });
+  }
+});
+
+    app.get("/withdrawals/:email", async (req, res) => {
+      const worker_email = req.params.email;
+
+      try {
+        const withdrawals = await withdrawalsCollection
+          .find({ worker_email })
+          .toArray();
+
+        res.status(200).json(withdrawals);
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Internal server error.", error: error.message });
+      }
+    });
+
+    app.post("/withdrawals", async (req, res) => {
+      const {
+        worker_email,
+        worker_name,
+        withdrawal_coin,
+        withdrawal_amount,
+        payment_system,
+        account_number,
+        withdraw_date,
+        status,
+      } = req.body;
+
+      // Validate minimum coins for withdrawal
+      if (withdrawal_coin < 200) {
+        return res
+          .status(400)
+          .json({ message: "Minimum 200 coins required for withdrawal." });
+      }
+
+      try {
+        // Deduct coins from the worker's account
+        const user = await usersCollection.findOne({ email: worker_email });
+
+        if (!user) {
+          return res.status(404).json({ message: "User not found." });
+        }
+
+        if (user.coins < withdrawal_coin) {
+          return res
+            .status(400)
+            .json({ message: "Insufficient coins for withdrawal." });
+        }
+
+        const updateResult = await usersCollection.updateOne(
+          { email: worker_email },
+          { $inc: { coins: -withdrawal_coin } }
+        );
+
+        if (updateResult.modifiedCount === 0) {
+          return res
+            .status(500)
+            .json({ message: "Failed to update user's coins." });
+        }
+
+        // Create a new withdrawal record
+        const withdrawalData = {
+          worker_email,
+          worker_name,
+          withdrawal_coin,
+          withdrawal_amount,
+          payment_system,
+          account_number,
+          withdraw_date: withdraw_date || new Date(),
+          status: status || "pending",
+        };
+
+        const insertResult = await withdrawalsCollection.insertOne(
+          withdrawalData
+        );
+
+        if (insertResult.acknowledged) {
+          res
+            .status(201)
+            .json({ message: "Withdrawal request submitted successfully." });
+        } else {
+          res
+            .status(500)
+            .json({ message: "Failed to create withdrawal request." });
+        }
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Internal server error.", error: error.message });
+      }
+    });
+
+    app.put("/withdrawals/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+
+      try {
+        const updateResult = await withdrawalsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (updateResult.modifiedCount > 0) {
+          res
+            .status(200)
+            .json({ message: "Withdrawal status updated successfully." });
+        } else {
+          res.status(404).json({ message: "Withdrawal request not found." });
+        }
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Internal server error.", error: error.message });
+      }
+    });
+
+    app.get("/admin/stats", async (req, res) => {
+      try {
+        const totalWorkers = await usersCollection.countDocuments({
+          role: "Worker",
+        });
+        const totalBuyers = await usersCollection.countDocuments({
+          role: "Buyer",
+        });
+        const totalCoins = await usersCollection
+          .aggregate([
+            { $group: { _id: null, totalCoins: { $sum: "$coins" } } },
+          ])
+          .toArray();
+        const totalPayments = await withdrawalsCollection
+          .aggregate([
+            { $match: { status: "approved" } },
+            {
+              $group: {
+                _id: null,
+                totalPayments: { $sum: "$withdrawal_amount" },
+              },
+            },
+          ])
+          .toArray();
+
+        res.json({
+          totalWorkers,
+          totalBuyers,
+          totalCoins: totalCoins[0]?.totalCoins || 0,
+          totalPayments: totalPayments[0]?.totalPayments || 0,
+        });
+      } catch (error) {
+        res.status(500).json({ message: "Error fetching admin stats", error });
       }
     });
 
