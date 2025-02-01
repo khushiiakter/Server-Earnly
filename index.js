@@ -128,8 +128,13 @@ async function run() {
     });
 
     app.post("/users", async (req, res) => {
-      const { name, email, image, role, coins } = req.body;
-
+      const { name, email, image, role, coins} = req.body;
+     
+      if (!email || !role) {
+        return res.status(400).send({ message: "Email and role are required" });
+      }
+    
+      const coinsToSet = coins || (role === "Worker" ? 10 : 50);
       const filter = { email };
       const updateDoc = {
         $set: {
@@ -137,7 +142,7 @@ async function run() {
 
           image: image || "",
           role: role || "",
-          coins: coins || 0,
+          coins: coinsToSet,
           timestamp: new Date().toISOString().split("T")[0],
         },
       };
@@ -304,7 +309,7 @@ async function run() {
 
     // Get Submissions for Buyer Tasks
     app.get("/submissions/:email", verifyToken, async (req, res) => {
-      const { buyer_email } = req.decoded.email; // Ensure this is the logged-in buyer's email
+      const { buyer_email } = req.params.email; 
 
       try {
         const submissions = await submissionsCollection
@@ -320,7 +325,7 @@ async function run() {
     app.post(
       "/submissions/approve",
       verifyToken,
-      verifyBuyer,
+     
       async (req, res) => {
         const { _id, worker_email, payable_amount } = req.body;
 
@@ -354,10 +359,9 @@ async function run() {
     );
 
     // Reject Submission
-    app.post(
-      "/submissions/reject",
+    app.post("/submissions/reject",
       verifyToken,
-      verifyBuyer,
+     
       async (req, res) => {
         const { _id, task_id } = req.body;
 
@@ -367,7 +371,7 @@ async function run() {
 
         try {
           const result = await submissionsCollection.updateOne(
-            { _id: ObjectId(_id) },
+            { _id: new ObjectId(_id) },
             { $set: { status: "rejected" } }
           );
 
@@ -376,7 +380,7 @@ async function run() {
           }
 
           await tasksCollection.updateOne(
-            { _id: ObjectId(task_id) },
+            { _id: new ObjectId(task_id) },
             { $inc: { requiredWorkers: 1 } }
           );
 
@@ -621,8 +625,6 @@ async function run() {
       }
     });
 
-    // Fetch all withdrawal requests (admin)
-    // Get pending withdrawal requests
     app.get("/withdrawals", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const withdrawals = await withdrawalsCollection
@@ -702,7 +704,7 @@ app.patch("/withdrawals/:id", verifyToken, verifyAdmin, async (req, res) => {
       }
 
       try {
-        // Deduct coins from the worker's account
+       
         const user = await usersCollection.findOne({ email: worker_email });
 
         if (!user) {
@@ -726,7 +728,7 @@ app.patch("/withdrawals/:id", verifyToken, verifyAdmin, async (req, res) => {
             .json({ message: "Failed to update user's coins." });
         }
 
-        // Create a new withdrawal record
+        
         const withdrawalData = {
           worker_email,
           worker_name,
