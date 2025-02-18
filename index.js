@@ -201,16 +201,33 @@ async function run() {
     app.get("/top-tasks", async (req, res) => {
       try {
         const topTasks = await tasksCollection
-          .find()
-          .sort({ payableAmount: -1 })
-          .limit(6)
+          .aggregate([
+            { $sort: { payableAmount: -1 } }, 
+            { $limit: 6 }, 
+            {
+              $lookup: {
+                from: "users",
+                localField: "userEmail", 
+                foreignField: "email", 
+                as: "userDetails", 
+              },
+            },
+            {
+              $addFields: {
+                Buyer_name: { $arrayElemAt: ["$userDetails.name", 0] }, 
+              },
+            },
+            { $project: { userDetails: 0 } }, 
+          ])
           .toArray();
+    
         res.send(topTasks);
       } catch (error) {
         console.error("Error fetching top-priced tasks:", error);
         res.status(500).send({ message: "Failed to fetch top-priced tasks" });
       }
     });
+    
 
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
